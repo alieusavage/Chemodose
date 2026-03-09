@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chemo Dose Calculator Prototype</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#f5f7fb;margin:0;color:#1f2937}
+  .wrap{max-width:1050px;margin:24px auto;padding:0 16px}
+  .card{background:#fff;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.08);padding:20px;margin-bottom:16px}
+  h1,h2{margin:0 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  label{display:block;font-size:14px;margin-bottom:6px;font-weight:600}
+  input{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:15px;box-sizing:border-box}
+  button{padding:10px 14px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
+  .primary{background:#1d4ed8;color:#fff}
+  .secondary{background:#e2e8f0}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .muted{color:#475569;font-size:14px}
+  .pill{display:inline-block;padding:6px 10px;background:#e0e7ff;color:#3730a3;border-radius:999px;font-size:13px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}
+  th{background:#eff6ff}
+  .error{color:#b91c1c;font-size:13px;margin-top:4px}
+  .small{font-size:12px}
+  @media print{button{display:none}.card{box-shadow:none;border:1px solid #ddd}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Chemo Dose Calculator</h1>
+    <div class="muted">Prototype based on the uploaded Excel workbook. For clinician verification before administration.</div>
+  </div>
+
+  <div class="card">
+    <h2>Patient details</h2>
+    <div class="grid">
+      <div>
+        <label for="age">Age (years)</label>
+        <input id="age" type="number" step="0.01" value="4" />
+        <div id="ageErr" class="error"></div>
+      </div>
+      <div>
+        <label for="weight">Weight (kg)</label>
+        <input id="weight" type="number" step="0.01" value="18" />
+        <div id="weightErr" class="error"></div>
+      </div>
+      <div>
+        <label for="height">Height (cm)</label>
+        <input id="height" type="number" step="0.01" value="105" />
+        <div id="heightErr" class="error"></div>
+      </div>
+      <div>
+        <label for="vialMass">Neupogen vial mass (µg)</label>
+        <input id="vialMass" type="number" step="0.01" value="300" />
+      </div>
+      <div>
+        <label for="vialVol">Vial volume (ml)</label>
+        <input id="vialVol" type="number" step="0.01" value="1" />
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="calculate()">Calculate</button>
+      <button class="secondary" onclick="resetForm()">Clear</button>
+      <button class="secondary" onclick="window.print()">Print</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Summary</h2>
+    <div class="grid">
+      <div><span class="muted">Age group</span><br><span id="ageGroup" class="pill">—</span></div>
+      <div><span class="muted">BSA (m²)</span><br><strong id="bsa">—</strong></div>
+      <div><span class="muted">Rule source</span><br><strong>Excel workbook logic</strong></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Medicine</th>
+          <th>Route</th>
+          <th>Formula</th>
+          <th>Result</th>
+          <th>Unit</th>
+          <th>Perfusion / Note</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <p class="small muted">Suggested next step: add rounding rules, caps, and export to PDF/WhatsApp if you want to deploy this beyond a prototype.</p>
+  </div>
+</div>
+
+<script>
+function num(id){ return parseFloat(document.getElementById(id).value); }
+function fmt(x){ return Number.isFinite(x) ? (Math.round(x * 100) / 100).toFixed(2) : "—"; }
+
+function validatePositive(id, label){
+  const value = num(id);
+  const err = document.getElementById(id + "Err");
+  if (!Number.isFinite(value) || value <= 0){
+    err.textContent = label + " must be greater than 0.";
+    return false;
+  }
+  err.textContent = "";
+  return true;
+}
+
+function calculate(){
+  const ok = [
+    validatePositive("age","Age"),
+    validatePositive("weight","Weight"),
+    validatePositive("height","Height")
+  ].every(Boolean);
+  if (!ok) return;
+
+  const age = num("age");
+  const weight = num("weight");
+  const height = num("height");
+  const vialMass = num("vialMass");
+  const vialVol = num("vialVol");
+  const bsa = Math.sqrt((height * weight) / 3600);
+  const under3 = age < 3;
+
+  document.getElementById("ageGroup").textContent = under3 ? "Younger than 3 years" : "3 years and older";
+  document.getElementById("bsa").textContent = fmt(bsa);
+
+  const rows = under3 ? [
+    ["Vincristine","IV","0.05 × weight_kg",0.05 * weight,"mg",""],
+    ["Etoposide","IV","12 × weight_kg",12 * weight,"mg",""],
+    ["NaCl 0.9% for Etoposide","—","30 × weight_kg",30 * weight,"ml","Run over 30 min"],
+    ["Carboplatin","IV","28 × weight_kg",28 * weight,"mg",""],
+    ["NaCl 0.9% for Carboplatin","—","9 × weight_kg",9 * weight,"ml","Run over 30 min"],
+    ["Ondansetron --START--","IV","0.15 × weight_kg",0.15 * weight,"mg",""],
+    ["Ondansetron TDS for 3/7 post chemo","PO","0.15 × weight_kg",0.15 * weight,"mg",""],
+    ["Ringers Lactate","IV","10 × weight_kg × 5",10 * weight * 5,"ml","Run over 5 hours"],
+    ["G-CSF mass","SC","5 × weight_kg",5 * weight,"µg","Start 24 hours post chemo"],
+    ["G-CSF volume","SC","vial_volume / (vial_mass / gcsf_mass)",vialVol / (vialMass / (5 * weight)),"ml","Insulin syringe of 1 ml (100 IU)"]
+  ] : [
+    ["Vincristine","IV","1.5 × bsa_m²",1.5 * bsa,"mg",""],
+    ["Etoposide","IV","300 × bsa_m²",300 * bsa,"mg",""],
+    ["NaCl 0.9% for Etoposide","—","30 × weight_kg",30 * weight,"ml","Run over 30 min"],
+    ["Carboplatin","IV","600 × bsa_m²",600 * bsa,"mg",""],
+    ["NaCl 0.9% for Carboplatin","—","9 × weight_kg",9 * weight,"ml","Run over 30 min"],
+    ["Ondansetron --START--","IV","0.15 × weight_kg",0.15 * weight,"mg",""],
+    ["Ondansetron TDS for 3/7 post chemo","PO","0.15 × weight_kg",0.15 * weight,"mg",""],
+    ["Ringers Lactate","IV","10 × weight_kg × 5",10 * weight * 5,"ml","Run over 5 hours"],
+    ["G-CSF mass","SC","5 × weight_kg",5 * weight,"µg","Start 24 hours post chemo"],
+    ["G-CSF volume","SC","vial_volume / (vial_mass / gcsf_mass)",vialVol / (vialMass / (5 * weight)),"ml","Insulin syringe of 1 ml (100 IU)"]
+  ];
+
+  const tbody = document.getElementById("resultsBody");
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r[0]}</td>
+      <td>${r[1]}</td>
+      <td>${r[2]}</td>
+      <td><strong>${fmt(r[3])}</strong></td>
+      <td>${r[4]}</td>
+      <td>${r[5]}</td>
+    </tr>
+  `).join("");
+}
+
+function resetForm(){
+  document.getElementById("age").value = "";
+  document.getElementById("weight").value = "";
+  document.getElementById("height").value = "";
+  document.getElementById("vialMass").value = "300";
+  document.getElementById("vialVol").value = "1";
+  document.getElementById("ageGroup").textContent = "—";
+  document.getElementById("bsa").textContent = "—";
+  document.getElementById("resultsBody").innerHTML = "";
+  ["ageErr","weightErr","heightErr"].forEach(id => document.getElementById(id).textContent = "");
+}
+
+calculate();
+</script>
+</body>
+</html>
